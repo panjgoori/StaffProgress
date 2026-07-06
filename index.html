@@ -60,36 +60,27 @@
         </div>
 
         <div id="log-tab" class="tab-content hidden">
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-                    <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6 pb-4 border-b border-gray-100">
-                        <h2 id="log-tab-title" class="text-xl font-semibold text-gray-900">Daily Records</h2>
-                        <div class="flex items-center space-x-2">
-                            <label class="text-sm font-medium text-gray-600">Target Log Date:</label>
-                            <input type="date" id="selected-date" onchange="handleDateChange()" class="p-2 border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-indigo-500 font-medium text-sm">
-                        </div>
+            <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
+                <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6 pb-4 border-b border-gray-100">
+                    <h2 id="log-tab-title" class="text-xl font-semibold text-gray-900">Daily Records</h2>
+                    <div class="flex items-center space-x-2">
+                        <label class="text-sm font-medium text-gray-600">Target Log Date:</label>
+                        <input type="date" id="selected-date" onchange="handleDateChange()" class="p-2 border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-indigo-500 font-medium text-sm">
                     </div>
-
-                    <form id="data-form" onsubmit="saveData(event)" class="space-y-6">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="staff-inputs-container">
-                            </div>
-                        <div id="no-staff-warning" class="hidden text-center py-6 text-gray-500 italic">
-                            No staff profiles created yet.
-                        </div>
-                        <div id="save-btn-container" class="admin-only hidden flex justify-end border-t border-gray-100 pt-4">
-                            <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 px-6 rounded-md shadow-sm transition-colors">
-                                Save Data & Closures
-                            </button>
-                        </div>
-                    </form>
                 </div>
 
-                <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
-                    <h2 class="text-xl font-semibold text-gray-900 mb-2">Data Entry Log Status</h2>
-                    <p class="text-xs text-gray-500 mb-4">Track completion maps for the selected day.</p>
-                    <div id="submission-checklist-container" class="space-y-3">
+                <form id="data-form" onsubmit="saveData(event)" class="space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="staff-inputs-container">
                         </div>
-                </div>
+                    <div id="no-staff-warning" class="hidden text-center py-6 text-gray-500 italic">
+                        No staff profiles created yet.
+                    </div>
+                    <div id="save-btn-container" class="admin-only hidden flex justify-end border-t border-gray-100 pt-4">
+                        <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 px-6 rounded-md shadow-sm transition-colors">
+                            Save Daily Metrics
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
 
@@ -363,7 +354,7 @@
                 if(weekSelector.options[i].value === targetMonStr) hasOption = true;
             }
             if(!hasOption) {
-                if(!performanceData[targetDateStr]) performanceData[targetDateStr] = { scores: {}, submissions: {} };
+                if(!performanceData[targetDateStr]) performanceData[targetDateStr] = {};
                 buildWeekDropdown();
             }
             weekSelector.value = targetMonStr;
@@ -375,8 +366,8 @@
             const currentDate = document.getElementById('selected-date').value;
             if (!currentDate) return;
 
-            const dayData = performanceData[currentDate] || { scores: {}, submissions: {} };
-            // Legacy data shape normalization fallback strategy
+            const dayData = performanceData[currentDate] || {};
+            // Flatten formatting safety parsing
             const scores = (dayData.scores !== undefined) ? dayData.scores : dayData;
 
             if (isAdmin) {
@@ -392,41 +383,6 @@
                     }
                 });
             }
-            renderSubmissionChecklist(currentDate);
-        }
-
-        function renderSubmissionChecklist(dateStr) {
-            const checklistContainer = document.getElementById('submission-checklist-container');
-            checklistContainer.innerHTML = '';
-            
-            const dayData = performanceData[dateStr] || { scores: {}, submissions: {} };
-            const submissions = dayData.submissions || {};
-
-            if(staffList.length === 0) {
-                checklistContainer.innerHTML = `<p class="text-gray-400 text-sm italic">No profiles created.</p>`;
-                return;
-            }
-
-            staffList.forEach(staff => {
-                const isComplete = submissions[staff] === true;
-                const wrapper = document.createElement('div');
-                wrapper.className = 'flex items-center justify-between p-2 rounded-md border border-gray-100 bg-gray-50/50';
-
-                if(isAdmin) {
-                    wrapper.innerHTML = `
-                        <span class="text-sm font-medium text-gray-700 truncate max-w-[180px]">${staff}</span>
-                        <input type="checkbox" data-checklist-staff="${staff}" ${isComplete ? 'checked' : ''} class="staff-submit-checkbox h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
-                    `;
-                } else {
-                    wrapper.innerHTML = `
-                        <span class="text-sm font-medium text-gray-700 truncate max-w-[180px]">${staff}</span>
-                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${isComplete ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}">
-                            ${isComplete ? '🟢 Logged' : '⚪ Pending'}
-                        </span>
-                    `;
-                }
-                checklistContainer.appendChild(wrapper);
-            });
         }
 
         function saveData(e) {
@@ -435,17 +391,12 @@
             const targetDate = document.getElementById('selected-date').value;
             if(!targetDate) return;
 
-            performanceData[targetDate] = { scores: {}, submissions: {} };
+            performanceData[targetDate] = {};
 
             document.querySelectorAll('.staff-score-input').forEach(input => {
                 const staffName = input.getAttribute('data-staff');
                 const val = parseFloat(input.value);
-                performanceData[targetDate].scores[staffName] = isNaN(val) ? 0 : val;
-            });
-
-            document.querySelectorAll('.staff-submit-checkbox').forEach(checkbox => {
-                const staffName = checkbox.getAttribute('data-checklist-staff');
-                performanceData[targetDate].submissions[staffName] = checkbox.checked;
+                performanceData[targetDate][staffName] = isNaN(val) ? 0 : val;
             });
 
             pushToCloud();
@@ -469,7 +420,7 @@
             staffList.forEach(staff => {
                 let rowTotal = 0;
                 let cellsHtml = activeWeekDates.map(dateStr => {
-                    const dayData = performanceData[dateStr] || { scores: {}, submissions: {} };
+                    const dayData = performanceData[dateStr] || {};
                     const scores = (dayData.scores !== undefined) ? dayData.scores : dayData;
                     const val = (scores && scores[staff]) ? scores[staff] : 0;
                     rowTotal += val;
@@ -508,7 +459,7 @@
 
             const staffTotals = staffList.map(staff => {
                 const total = activeWeekDates.reduce((sum, dateStr) => {
-                    const dayData = performanceData[dateStr] || { scores: {}, submissions: {} };
+                    const dayData = performanceData[dateStr] || {};
                     const scores = (dayData.scores !== undefined) ? dayData.scores : dayData;
                     const val = (scores && scores[staff]) ? scores[staff] : 0;
                     return sum + val;
@@ -544,7 +495,7 @@
             const datasets = staffList.map((staff, idx) => {
                 const colors = ['#4f46e5', '#0d9488', '#d97706', '#dc2626', '#9333ea', '#4b5563', '#ec4899'];
                 const dataValues = activeWeekDates.map(dateStr => {
-                    const dayData = performanceData[dateStr] || { scores: {}, submissions: {} };
+                    const dayData = performanceData[dateStr] || {};
                     const scores = (dayData.scores !== undefined) ? dayData.scores : dayData;
                     return (scores && scores[staff]) ? scores[staff] : 0;
                 });
@@ -641,7 +592,7 @@
 
             const rows = staffList.map(staff => {
                 const days = activeWeekDates.map(dateStr => {
-                    const dayData = performanceData[dateStr] || { scores: {}, submissions: {} };
+                    const dayData = performanceData[dateStr] || {};
                     const scores = (dayData.scores !== undefined) ? dayData.scores : dayData;
                     return (scores && scores[staff]) ? scores[staff] : 0;
                 });
@@ -672,8 +623,7 @@
         function refreshViews() {
             renderProgressTable();
             renderLeaderboardAndChart();
-            const currentDate = document.getElementById('selected-date').value;
-            if(currentDate) renderSubmissionChecklist(currentDate);
+            updateFormInputsForDate();
         }
 
         window.onload = function() {
