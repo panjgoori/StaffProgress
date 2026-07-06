@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Week Staff Performance Tracker</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</head>
+<body class="bg-gray-50 font-sans text-gray-800">
+
+    <div id="loading-overlay" class="fixed inset-0 bg-gray-900/50 backdrop-blur-xs flex items-center justify-center z-50 transition-opacity duration-200">
+        <div class="bg-white p-6 rounded-lg shadow-xl flex items-center space-x-4">
+            <div class="animate-spin rounded-full h-8 w-8 border-4 border-indigo-600 border-t-transparent"></div>
+            <p class="font-medium text-gray-700" id="loading-text">Syncing with Google Sheets...</p>
+        </div>
+    </div>
+
+    <div class="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8">
+        <header class="mb-8 flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-6 rounded-lg shadow-sm border border-gray-100">
+            <div class="text-center sm:text-left">
+                <h1 class="text-2xl font-bold text-gray-900">Staff Performance Tracker</h1>
+                <p class="text-gray-500 text-sm flex items-center justify-center sm:justify-start gap-2">
+                    <span>Multi-Week Cloud Sync</span>
+                    <span id="admin-badge" class="hidden bg-red-100 text-red-800 text-xs font-bold px-2 py-0.5 rounded-full">Admin Mode</span>
+                    <span id="readonly-badge" class="bg-gray-100 text-gray-800 text-xs font-bold px-2 py-0.5 rounded-full">Read-Only</span>
+                </p>
+            </div>
+            
+            <div class="flex flex-wrap gap-3 items-center justify-center">
+                <div class="flex items-center space-x-2 bg-indigo-50 px-3 py-1.5 rounded-md border border-indigo-100">
+                    <label class="text-xs font-bold text-indigo-900 uppercase">View Week:</label>
+                    <select id="global-week-selector" onchange="refreshViews()" class="bg-white border border-indigo-200 rounded text-sm font-semibold p-1 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                        </select>
+                </div>
+                <button onclick="fetchFromCloud()" class="bg-gray-600 hover:bg-gray-700 text-white text-xs font-semibold py-2 px-3 rounded shadow-sm transition">
+                    🔄 Refresh
+                </button>
+                <button onclick="exportToExcel()" class="bg-green-600 hover:bg-green-700 text-white text-xs font-semibold py-2 px-3 rounded shadow-sm transition">
+                    📊 Export Excel
+                </button>
+            </div>
+        </header>
+
+        <div class="flex flex-wrap border-b border-gray-200 mb-6 bg-white rounded-t-lg shadow-sm">
+            <button onclick="switchTab('log-tab')" id="btn-log-tab" class="tab-btn flex-1 min-w-[120px] py-4 px-2 text-center font-medium text-sm border-b-2 border-indigo-600 text-indigo-600 focus:outline-none">
+                Log / View Daily
+            </button>
+            <button onclick="switchTab('progress-tab')" id="btn-progress-tab" class="tab-btn flex-1 min-w-[120px] py-4 px-2 text-center font-medium text-sm border-b-2 border-transparent text-gray-500 hover:text-gray-700 focus:outline-none">
+                Weekly Progress
+            </button>
+            <button onclick="switchTab('compare-tab')" id="btn-compare-tab" class="tab-btn flex-1 min-w-[120px] py-4 px-2 text-center font-medium text-sm border-b-2 border-transparent text-gray-500 hover:text-gray-700 focus:outline-none">
+                Comparison & Reports
+            </button>
+            <button onclick="switchTab('manage-tab')" id="btn-manage-tab" class="admin-only hidden flex-1 min-w-[120px] py-4 px-2 text-center font-medium text-sm border-b-2 border-transparent text-gray-500 hover:text-gray-700 focus:outline-none">
+                ⚙️ Manage Staff
+            </button>
+        </div>
+
+        <div id="log-tab" class="tab-content block">
+            <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
+                <div class="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6 pb-4 border-b border-gray-100">
+                    <h2 id="log-tab-title" class="text-xl font-semibold text-gray-900">Daily Records</h2>
+                    <div class="flex items-center space-x-2">
+                        <label class="text-sm font-medium text-gray-600">Target Log Date:</label>
+                        <input type="date" id="selected-date" onchange="handleDateChange()" class="p-2 border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-indigo-500 font-medium text-sm">
+                    </div>
+                </div>
+
+                <form id="data-form" onsubmit="saveData(event)" class="space-y-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="staff-inputs-container">
+                        </div>
+                    <div id="no-staff-warning" class="hidden text-center py-6 text-gray-500 italic">
+                        No staff profiles created yet.
+                    </div>
+                    <div id="save-btn-container" class="admin-only hidden flex justify-end border-t border-gray-100 pt-4">
+                        <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 px-6 rounded-md shadow-sm transition-colors">
+                            Save Data for Selected Date
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div id="progress-tab" class="tab-content hidden">
+            <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
+                <h2 class="text-xl font-semibold mb-4 text-gray-900">Weekly Progress Overview</h2>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200 text-left text-sm">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="p-4 font-semibold text-gray-900">Staff Member</th>
+                                <th class="p-4 font-semibold text-gray-900" id="th-mon">Mon</th>
+                                <th class="p-4 font-semibold text-gray-900" id="th-tue">Tue</th>
+                                <th class="p-4 font-semibold text-gray-900" id="th-wed">Wed</th>
+                                <th class="p-4 font-semibold text-gray-900" id="th-thu">Thu</th>
+                                <th class="p-4 font-semibold text-gray-900" id="th-fri">Fri</th>
+                                <th class="p-4 font-semibold text-gray-900 bg-indigo-50 text-indigo-900">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody id="progress-table-body" class="divide-y divide-gray-200">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="compare-tab" class="tab-content hidden">
+            <div class="mb-4 flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-lg shadow-sm border border-gray-100">
+                <div class="flex items-center space-x-3">
+                    <span class="text-sm font-medium text-gray-600">Chart Style:</span>
+                    <div class="inline-flex rounded-md shadow-xs">
+                        <button onclick="toggleChartType('bar')" id="btn-chart-bar" class="bg-indigo-600 text-white text-xs font-semibold py-2 px-4 rounded-l-md border border-indigo-600 transition-colors">
+                            Bar Chart
+                        </button>
+                        <button onclick="toggleChartType('line')" id="btn-chart-line" class="bg-white text-gray-700 hover:bg-gray-50 text-xs font-semibold py-2 px-4 rounded-r-md border border-gray-300 transition-colors">
+                            Line Chart
+                        </button>
+                    </div>
+                </div>
+                <button onclick="exportToPDF()" class="bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-2 px-4 rounded shadow-sm transition flex items-center gap-1.5">
+                    picture_as_pdf Export Review Report (PDF)
+                </button>
+            </div>
+
+            <div id="pdf-report-content" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm border border-gray-100">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-semibold text-gray-900">Performance Breakdown</h2>
+                        <span id="pdf-week-label" class="text-sm text-indigo-600 font-bold bg-indigo-50 px-2.5 py-1 rounded"></span>
+                    </div>
+                    <div class="relative min-h-[360px]">
+                        <canvas id="comparisonChart"></canvas>
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
+                    <h2 class="text-xl font-semibold mb-4 text-gray-900">Weekly Standing Leaderboard</h2>
+                    <ol id="leaderboard-list" class="space-y-3 divide-y divide-gray-100">
+                        </ol>
+                </div>
+            </div>
+        </div>
+
+        <div id="manage-tab" class="tab-content hidden">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-100 h-fit">
+                    <h2 class="text-xl font-semibold mb-4 text-gray-900">Add Staff Profile</h2>
+                    <form onsubmit="addStaffMember(event)" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                            <input type="text" id="new-staff-name" placeholder="e.g., John Doe" class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 focus:outline-none" required>
+                        </div>
+                        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded shadow transition">
+                            Add Member
+                        </button>
+                    </form>
+                </div>
+                <div class="md:col-span-2 bg-white p-6 rounded-lg shadow-sm border border-gray-100">
+                    <h2 class="text-xl font-semibold mb-4 text-gray-900">Current Directory</h2>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200 text-left text-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="p-4 font-semibold text-gray-900">Name</th>
+                                    <th class="p-4 font-semibold text-right text-gray-900">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="management-table-body" class="divide-y divide-gray-200">
+                                </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // PASTE YOUR GOOGLE WEB APP URL HERE
+        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw_Weo34Z0aXfsl85TwjzBgfah2FatoJRj5LLQjEob3RYQ6Nkk_uvgk9el334HwZBn9WQ/exec";
+
+        let staffList = [];
+        let performanceData = {};
+        let chartInstance = null;
+        let isAdmin = false;
+        
+        // Configuration preferences
+        let preferredChartType = 'bar'; 
+
+        function formatDate(date) {
+            const d = new Date(date);
+            let month = '' + (d.getMonth() + 1), day = '' + d.getDate();
+            const year = d.getFullYear();
+            if (month.length < 2) month = '0' + month;
+            if (day.length < 2) day = '0' + day;
+            return [year, month, day].join('-');
+        }
+
+        function getMondayOfDate(d) {
+            const date = new Date(d);
+            const day = date.getDay();
+            const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+            return new Date(date.setDate(diff));
+        }
+
+        function getMonToFriDatesForWeek(mondayDate) {
+            let dates = [];
+            for (let i = 0; i < 5; i++) {
+                let nextDay = new Date(mondayDate);
+                nextDay.setDate(mondayDate.getDate() + i);
+                dates.push(formatDate(nextDay));
+            }
+            return dates;
+        }
+
+        function buildWeekDropdown() {
+            const dropdown = document.getElementById('global-week-selector');
+            const currentSelectedValue = dropdown.value;
+            dropdown.innerHTML = '';
+
+            let trackedWeeks = new Set();
+            Object.keys(performanceData).forEach(dateStr => {
+                const mon = getMondayOfDate(new Date(dateStr + "T00:00:00"));
+                trackedWeeks.add(formatDate(mon));
+            });
+
+            const currentMondayStr = formatDate(getMondayOfDate(new Date()));
+            trackedWeeks.add(currentMondayStr);
+            const sortedMondays = Array.from(trackedWeeks).sort().reverse();
+
+            sortedMondays.forEach(monStr => {
+                const monDate = new Date(monStr + "T00:00:00");
+                const friDate = new Date(monDate);
+                friDate.setDate(monDate.getDate() + 4);
+                
+                const option = document.createElement('option');
+                option.value = monStr;
+                option.innerText = `${monDate.toLocaleDateString(undefined, {month:'short', day:'numeric'})} - ${friDate.toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'})}`;
+                dropdown.appendChild(option);
+            });
+
+            if (currentSelectedValue && sortedMondays.includes(currentSelectedValue)) {
+                dropdown.value = currentSelectedValue;
+            } else {
+                dropdown.value = currentMondayStr;
+            }
+        }
+
+        function getActiveWeekDateList() {
+            const selectedMonStr = document.getElementById('global-week-selector').value;
+            if (!selectedMonStr) return getMonToFriDatesForWeek(getMondayOfDate(new Date()));
+            return getMonToFriDatesForWeek(new Date(selectedMonStr + "T00:00:00"));
+        }
+
+        function checkAdminStatus() {
+            const urlParams = new URLSearchParams(window.location.search);
+            isAdmin = urlParams.get('admin') === 'true';
+
+            if (isAdmin) {
+                document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('hidden'));
+                document.getElementById('admin-badge').classList.remove('hidden');
+                document.getElementById('readonly-badge').classList.add('hidden');
+                document.getElementById('log-tab-title').innerText = "Enter Daily Metrics";
+            }
+        }
+
+        function showLoading(text) {
+            document.getElementById('loading-text').innerText = text;
+            document.getElementById('loading-overlay').style.display = 'flex';
+        }
+
+        function hideLoading() {
+            document.getElementById('loading-overlay').style.display = 'none';
+        }
+
+        async function fetchFromCloud() {
+            if (SCRIPT_URL.includes("YOUR_GOOGLE_SCRIPT_WEB_APP_URL_HERE")) {
+                hideLoading();
+                alert("Please add your Google Apps Script Web App URL to the code first!");
+                return;
+            }
+            showLoading("Fetching data matrix from Google Sheets...");
+            try {
+                const response = await fetch(SCRIPT_URL);
+                const cloudData = await response.json();
+                
+                staffList = cloudData.staffList || [];
+                performanceData = cloudData.performanceData || {};
+                
+                buildWeekDropdown();
+                initInputForm();
+                refreshViews();
+                if (isAdmin) renderManagementDirectory();
+            } catch (error) {
+                console.error(error);
+                alert("Failed to connect to cloud database.");
+            } finally {
+                hideLoading();
+            }
+        }
+
+        async function pushToCloud() {
+            if (!isAdmin) return;
+            showLoading("Saving records to Google Sheets Cloud...");
+            try {
+                await fetch(SCRIPT_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ staffList: staffList, performanceData: performanceData })
+                });
+                alert("Cloud database successfully updated!");
+            } catch (error) {
+                alert("Cloud update failed.");
+            } finally {
+                hideLoading();
+                buildWeekDropdown();
+                refreshViews();
+            }
+        }
+
+        function initInputForm() {
+            const container = document.getElementById('staff-inputs-container');
+            const warning = document.getElementById('no-staff-warning');
+            container.innerHTML = '';
+            
+            if (staffList.length === 0) {
+                warning.classList.remove('hidden');
+                return;
+            }
+            warning.classList.add('hidden');
+
+            staffList.forEach(staff => {
+                const div = document.createElement('div');
+                div.className = 'bg-gray-50 p-4 rounded-md border border-gray-200';
+                if (isAdmin) {
+                    div.innerHTML = `
+                        <label class="block text-sm font-semibold text-gray-700 mb-1 truncate">${staff}</label>
+                        <input type="number" data-staff="${staff}" min="0" step="any" class="staff-score-input w-full p-2 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                    `;
+                } else {
+                    div.innerHTML = `
+                        <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 truncate">${staff}</label>
+                        <div id="view-${staff.replace(/\s+/g, '-')}" class="text-xl font-bold text-indigo-700 bg-indigo-50/50 p-2 rounded border border-indigo-100">-</div>
+                    `;
+                }
+                container.appendChild(div);
+            });
+            updateFormInputsForDate();
+        }
+
+        function handleDateChange() {
+            const targetDateStr = document.getElementById('selected-date').value;
+            if(!targetDateStr) return;
+            const targetMonStr = formatDate(getMondayOfDate(new Date(targetDateStr + "T00:00:00")));
+            const weekSelector = document.getElementById('global-week-selector');
+            
+            let hasOption = false;
+            for(let i=0; i < weekSelector.options.length; i++) {
+                if(weekSelector.options[i].value === targetMonStr) hasOption = true;
+            }
+            if(!hasOption) {
+                if(!performanceData[targetDateStr]) performanceData[targetDateStr] = {};
+                buildWeekDropdown();
+            }
+            weekSelector.value = targetMonStr;
+            updateFormInputsForDate();
+            refreshViews();
+        }
+
+        function updateFormInputsForDate() {
+            const currentDate = document.getElementById('selected-date').value;
+            if (!currentDate) return;
+
+            if (isAdmin) {
+                document.querySelectorAll('.staff-score-input').forEach(input => {
+                    const staffName = input.getAttribute('data-staff');
+                    input.value = performanceData[currentDate]?.[staffName] !== undefined ? performanceData[currentDate][staffName] : '';
+                });
+            } else {
+                staffList.forEach(staff => {
+                    const displayEl = document.getElementById(`view-${staff.replace(/\s+/g, '-')}`);
+                    if (displayEl) displayEl.innerText = performanceData[currentDate]?.[staff] !== undefined ? performanceData[currentDate][staff] : 0;
+                });
+            }
+        }
+
+        function saveData(e) {
+            e.preventDefault();
+            if (!isAdmin) return;
+            const targetDate = document.getElementById('selected-date').value;
+            if(!targetDate) return;
+
+            if (!performanceData[targetDate]) performanceData[targetDate] = {};
+            document.querySelectorAll('.staff-score-input').forEach(input => {
+                const staffName = input.getAttribute('data-staff');
+                const val = parseFloat(input.value);
+                performanceData[targetDate][staffName] = isNaN(val) ? 0 : val;
+            });
+            pushToCloud();
+        }
+
+        function renderProgressTable() {
+            const tbody = document.getElementById('progress-table-body');
+            tbody.innerHTML = '';
+            const activeWeekDates = getActiveWeekDateList();
+
+            ['mon', 'tue', 'wed', 'thu', 'fri'].forEach((day, idx) => {
+                const dObj = new Date(activeWeekDates[idx] + "T00:00:00");
+                document.getElementById(`th-${day}`).innerText = `${day.toUpperCase()} (${dObj.getDate()}/${dObj.getMonth()+1})`;
+            });
+
+            if (staffList.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-gray-500 italic">No staff profiles found.</td></tr>`;
+                return;
+            }
+
+            staffList.forEach(staff => {
+                let rowTotal = 0;
+                let cellsHtml = activeWeekDates.map(dateStr => {
+                    const val = performanceData[dateStr]?.[staff] || 0;
+                    rowTotal += val;
+                    return `<td class="p-4 text-gray-600">${val}</td>`;
+                }).join('');
+
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-50 transition-colors';
+                row.innerHTML = `<td class="p-4 font-medium text-gray-900 truncate">${staff}</td>${cellsHtml}<td class="p-4 font-bold bg-indigo-50/50 text-indigo-700">${rowTotal}</td>`;
+                tbody.appendChild(row);
+            });
+        }
+
+        // --- IMPROVED GRAPH STYLE MODES TOGGLE ENGINE ---
+        function toggleChartType(type) {
+            preferredChartType = type;
+            const barBtn = document.getElementById('btn-chart-bar');
+            const lineBtn = document.getElementById('btn-chart-line');
+
+            if(type === 'bar') {
+                barBtn.className = "bg-indigo-600 text-white text-xs font-semibold py-2 px-4 rounded-l-md border border-indigo-600 transition-colors";
+                lineBtn.className = "bg-white text-gray-700 hover:bg-gray-50 text-xs font-semibold py-2 px-4 rounded-r-md border border-gray-300 transition-colors";
+            } else {
+                barBtn.className = "bg-white text-gray-700 hover:bg-gray-50 text-xs font-semibold py-2 px-4 rounded-l-md border border-gray-300 transition-colors";
+                lineBtn.className = "bg-indigo-600 text-white text-xs font-semibold py-2 px-4 rounded-r-md border border-indigo-600 transition-colors";
+            }
+            renderLeaderboardAndChart();
+        }
+
+        function renderLeaderboardAndChart() {
+            const activeWeekDates = getActiveWeekDateList();
+            
+            // Set context week badge text for clarity inside the print dashboard block
+            const selectorElement = document.getElementById('global-week-selector');
+            if(selectorElement.options.length > 0) {
+                document.getElementById('pdf-week-label').innerText = selectorElement.options[selectorElement.selectedIndex].text;
+            }
+
+            const staffTotals = staffList.map(staff => {
+                const total = activeWeekDates.reduce((sum, dateStr) => sum + (performanceData[dateStr]?.[staff] || 0), 0);
+                return { name: staff, total: total };
+            });
+
+            const sortedStaff = [...staffTotals].sort((a, b) => b.total - a.total);
+            const leaderboard = document.getElementById('leaderboard-list');
+            leaderboard.innerHTML = '';
+            
+            sortedStaff.forEach((staff, index) => {
+                const li = document.createElement('li');
+                li.className = 'flex justify-between items-center py-3 first:pt-0';
+                li.innerHTML = `
+                    <div class="flex items-center space-x-3 min-w-0">
+                        <span class="flex items-center justify-center shrink-0 w-6 h-6 rounded-full text-xs font-bold ${index === 0 ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-700'}">${index + 1}</span>
+                        <span class="font-medium text-gray-800 truncate">${staff.name}</span>
+                    </div>
+                    <span class="font-bold text-gray-900 shrink-0 ml-2">${staff.total} pts</span>
+                `;
+                leaderboard.appendChild(li);
+            });
+
+            const ctx = document.getElementById('comparisonChart').getContext('2d');
+            if (chartInstance) chartInstance.destroy();
+
+            const axisLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map((day, idx) => {
+                const dObj = new Date(activeWeekDates[idx] + "T00:00:00");
+                return `${day} (${dObj.getDate()}/${dObj.getMonth()+1})`;
+            });
+
+            const datasets = staffList.map((staff, idx) => {
+                const colors = ['#4f46e5', '#0d9488', '#d97706', '#dc2626', '#9333ea', '#4b5563', '#ec4899'];
+                const dataValues = activeWeekDates.map(dateStr => performanceData[dateStr]?.[staff] || 0);
+                
+                return {
+                    label: staff,
+                    data: dataValues,
+                    borderColor: colors[idx % colors.length],
+                    backgroundColor: preferredChartType === 'line' ? colors[idx % colors.length] + '20' : colors[idx % colors.length], // add light alpha fill for lines
+                    borderRadius: 4,
+                    tension: 0.2, // smoother transitions for curve points
+                    fill: preferredChartType === 'line' ? false : true
+                };
+            });
+
+            chartInstance = new Chart(ctx, {
+                type: preferredChartType,
+                data: { labels: axisLabels, datasets: datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, grid: { color: '#f3f4f6' } }, x: { grid: { display: false } } },
+                    plugins: { legend: { position: 'top', labels: { boxWidth: 10, usePointStyle: true } } }
+                }
+            });
+        }
+
+        // --- NEW HTML2PDF EXPORT ENGINE ---
+        function exportToPDF() {
+            const element = document.getElementById('pdf-report-content');
+            const weekLabel = document.getElementById('global-week-selector').value;
+            
+            // Configuration rules for the print engine layouts
+            const opt = {
+                margin:       [0.5, 0.5, 0.5, 0.5],
+                filename:     `Staff_Performance_Review_Week_${weekLabel}.pdf`,
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2, useCORS: true },
+                jsPDF:        { unit: 'in', format: 'letter', orientation: 'landscape' }
+            };
+
+            showLoading("Compiling PDF Executive Report...");
+            
+            // Process the view block clone parsing
+            html2pdf().set(opt).from(element).save().then(() => {
+                hideLoading();
+            }).catch(err => {
+                console.error(err);
+                hideLoading();
+                alert("PDF Compilation failed.");
+            });
+        }
+
+        function renderManagementDirectory() {
+            const tbody = document.getElementById('management-table-body');
+            tbody.innerHTML = '';
+            staffList.forEach(staff => {
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-50';
+                row.innerHTML = `
+                    <td class="p-4 font-medium text-gray-800">${staff}</td>
+                    <td class="p-4 text-right">
+                        <button onclick="deleteStaffMember('${staff.replace(/'/g, "\\'")}')" class="text-red-600 hover:text-red-900 font-semibold text-xs py-1 px-2.5 rounded hover:bg-red-50 transition">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function addStaffMember(e) {
+            e.preventDefault();
+            if (!isAdmin) return;
+            const input = document.getElementById('new-staff-name');
+            const name = input.value.trim();
+            if (!name || staffList.includes(name)) return;
+            staffList.push(name);
+            input.value = '';
+            renderManagementDirectory();
+            initInputForm();
+            pushToCloud();
+        }
+
+        function deleteStaffMember(name) {
+            if (!isAdmin) return;
+            if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
+            staffList = staffList.filter(item => item !== name);
+            renderManagementDirectory();
+            initInputForm();
+            pushToCloud();
+        }
+
+        function exportToExcel() {
+            if(staffList.length === 0) return;
+            const activeWeekDates = getActiveWeekDateList();
+            const weekLabel = document.getElementById('global-week-selector').value;
+
+            const rows = staffList.map(staff => {
+                const mon = performanceData[activeWeekDates[0]]?.[staff] || 0;
+                const tue = performanceData[activeWeekDates[1]]?.[staff] || 0;
+                const wed = performanceData[activeWeekDates[2]]?.[staff] || 0;
+                const thu = performanceData[activeWeekDates[3]]?.[staff] || 0;
+                const fri = performanceData[activeWeekDates[4]]?.[staff] || 0;
+                return {
+                    "Staff Name": staff,
+                    "Monday": mon, "Tuesday": tue, "Wednesday": wed, "Thursday": thu, "Friday": fri,
+                    "Total Sum": (mon + tue + wed + thu + fri)
+                };
+            });
+            const worksheet = XLSX.utils.json_to_sheet(rows);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Performance Summary");
+            XLSX.writeFile(workbook, `Performance_Export_Week_${weekLabel}.xlsx`);
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.replace('block', 'hidden'));
+            document.getElementById(tabId).classList.replace('hidden', 'block');
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('border-indigo-600', 'text-indigo-600');
+                btn.classList.add('border-transparent', 'text-gray-500');
+            });
+            document.getElementById(`btn-${tabId}`).classList.add('border-indigo-600', 'text-indigo-600');
+            if(tabId !== 'manage-tab') refreshViews();
+        }
+
+        function refreshViews() {
+            renderProgressTable();
+            renderLeaderboardAndChart();
+        }
+
+        window.onload = function() {
+            document.getElementById('selected-date').value = formatDate(new Date());
+            checkAdminStatus();
+            fetchFromCloud();
+        };
+    </script>
+</body>
+</html>
