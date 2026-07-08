@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multi-Week Staff Performance Tracker</title>
+    <title>Staff Performance Hub</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -21,7 +21,7 @@
     <div class="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8">
         <header class="mb-8 flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-6 rounded-lg shadow-sm border border-gray-100">
             <div class="text-center sm:text-left">
-                <h1 class="text-2xl font-bold text-gray-900">Staff Performance Tracker</h1>
+                <h1 class="text-2xl font-bold text-gray-900">Staff Performance Hub</h1>
                 <p class="text-gray-500 text-sm flex items-center justify-center sm:justify-start gap-2">
                     <span>Multi-Week Cloud Sync</span>
                     <span id="admin-badge" class="hidden bg-red-100 text-red-800 text-xs font-bold px-2 py-0.5 rounded-full">Admin Mode</span>
@@ -45,6 +45,9 @@
         </header>
 
         <div class="flex flex-wrap border-b border-gray-200 mb-6 bg-white rounded-t-lg shadow-sm">
+            <button onclick="switchTab('home-tab')" id="btn-home-tab" class="tab-btn flex-1 min-w-[120px] py-4 px-2 text-center font-medium text-sm border-b-2 border-transparent text-gray-500 hover:text-gray-700 focus:outline-none">
+                🏠 Dashboard Home
+            </button>
             <button onclick="switchTab('log-tab')" id="btn-log-tab" class="tab-btn flex-1 min-w-[120px] py-4 px-2 text-center font-medium text-sm border-b-2 border-transparent text-gray-500 hover:text-gray-700 focus:outline-none">
                 Log / View Daily
             </button>
@@ -57,6 +60,44 @@
             <button onclick="switchTab('manage-tab')" id="btn-manage-tab" class="admin-only hidden flex-1 min-w-[120px] py-4 px-2 text-center font-medium text-sm border-b-2 border-transparent text-gray-500 hover:text-gray-700 focus:outline-none">
                 ⚙️ Manage Staff
             </button>
+        </div>
+
+        <div id="home-tab" class="tab-content hidden">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="md:col-span-2 bg-white p-6 rounded-lg shadow-sm border border-gray-100 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-bold text-indigo-600 uppercase tracking-wider">Operational Snapshot</span>
+                            <span id="home-date-badge" class="bg-indigo-50 text-indigo-700 text-xs font-medium px-2.5 py-1 rounded-md border border-indigo-100">No Entry Found</span>
+                        </div>
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">Last Logged Day Activity</h3>
+                        <div class="flex items-baseline space-x-2 my-2">
+                            <span id="home-total-tasks" class="text-5xl font-extrabold text-gray-900 tracking-tight">0</span>
+                            <span class="text-gray-500 font-medium text-sm">Total Metrics Registered</span>
+                        </div>
+                        <p class="text-gray-500 text-sm mt-2">This reflects the sum total of all performance indicators logged across active staff members on the most recent tracking date.</p>
+                    </div>
+                    <div class="border-t border-gray-100 pt-4 mt-6 flex justify-start">
+                        <button onclick="navigateToDetailedDay()" class="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm py-2 px-4 rounded-md shadow-sm transition">
+                            Check Detailed Tasks Entry →
+                        </button>
+                    </div>
+                </div>
+
+                <div class="bg-gradient-to-br from-indigo-900 to-slate-900 text-white p-6 rounded-lg shadow-md flex flex-col justify-between">
+                    <div>
+                        <h4 class="font-bold text-lg mb-2">Manager's Corner</h4>
+                        <p class="text-indigo-200 text-xs leading-relaxed mb-4">Use this interface to monitor and equalize workloads across your active operational directory.</p>
+                        <ul class="text-xs space-y-2 text-indigo-100/90">
+                            <li class="flex items-start gap-2">🔹 <span><strong>Admin Mode:</strong> Append <code class="bg-black/30 px-1 rounded">?admin=true</code> to your URL.</span></li>
+                            <li class="flex items-start gap-2">🔹 <span><strong>Live Sync:</strong> Changes instantly save back to Google Sheets.</span></li>
+                        </ul>
+                    </div>
+                    <div class="text-[11px] text-indigo-300 border-t border-indigo-800 pt-3 mt-4 italic">
+                        Connected to secure cloud engine.
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div id="log-tab" class="tab-content hidden">
@@ -185,6 +226,7 @@
         let chartInstance = null;
         let isAdmin = false;
         let preferredChartType = 'bar'; 
+        let lastLoggedDateGlobal = "";
 
         function formatDate(date) {
             const d = new Date(date);
@@ -283,6 +325,7 @@
                 
                 buildWeekDropdown();
                 initInputForm();
+                calculateHomepageStats();
                 refreshViews();
                 if (isAdmin) renderManagementDirectory();
             } catch (error) {
@@ -293,351 +336,4 @@
             }
         }
 
-        async function pushToCloud() {
-            if (!isAdmin) return;
-            showLoading("Saving records to Google Sheets Cloud...");
-            try {
-                await fetch(SCRIPT_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ staffList: staffList, performanceData: performanceData })
-                });
-                alert("Cloud database successfully updated!");
-            } catch (error) {
-                alert("Cloud update failed.");
-            } finally {
-                hideLoading();
-                buildWeekDropdown();
-                refreshViews();
-            }
-        }
-
-        function initInputForm() {
-            const container = document.getElementById('staff-inputs-container');
-            const warning = document.getElementById('no-staff-warning');
-            container.innerHTML = '';
-            
-            if (staffList.length === 0) {
-                warning.classList.remove('hidden');
-                return;
-            }
-            warning.classList.add('hidden');
-
-            staffList.forEach(staff => {
-                const div = document.createElement('div');
-                div.className = 'bg-gray-50 p-4 rounded-md border border-gray-200';
-                if (isAdmin) {
-                    div.innerHTML = `
-                        <label class="block text-sm font-semibold text-gray-700 mb-1 truncate">${staff}</label>
-                        <input type="number" data-staff="${staff}" min="0" step="any" class="staff-score-input w-full p-2 border border-gray-300 rounded bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-                    `;
-                } else {
-                    div.innerHTML = `
-                        <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1 truncate">${staff}</label>
-                        <div id="view-${staff.replace(/\s+/g, '-')}" class="text-xl font-bold text-indigo-700 bg-indigo-50/50 p-2 rounded border border-indigo-100">-</div>
-                    `;
-                }
-                container.appendChild(div);
-            });
-            updateFormInputsForDate();
-        }
-
-        function handleDateChange() {
-            const targetDateStr = document.getElementById('selected-date').value;
-            if(!targetDateStr) return;
-            const targetMonStr = formatDate(getMondayOfDate(new Date(targetDateStr + "T00:00:00")));
-            const weekSelector = document.getElementById('global-week-selector');
-            
-            let hasOption = false;
-            for(let i=0; i < weekSelector.options.length; i++) {
-                if(weekSelector.options[i].value === targetMonStr) hasOption = true;
-            }
-            if(!hasOption) {
-                if(!performanceData[targetDateStr]) performanceData[targetDateStr] = {};
-                buildWeekDropdown();
-            }
-            weekSelector.value = targetMonStr;
-            updateFormInputsForDate();
-            refreshViews();
-        }
-
-        function updateFormInputsForDate() {
-            const currentDate = document.getElementById('selected-date').value;
-            if (!currentDate) return;
-
-            const dayData = performanceData[currentDate] || {};
-            // Flatten formatting safety parsing
-            const scores = (dayData.scores !== undefined) ? dayData.scores : dayData;
-
-            if (isAdmin) {
-                document.querySelectorAll('.staff-score-input').forEach(input => {
-                    const staffName = input.getAttribute('data-staff');
-                    input.value = (scores && scores[staffName] !== undefined) ? scores[staffName] : '';
-                });
-            } else {
-                staffList.forEach(staff => {
-                    const displayEl = document.getElementById(`view-${staff.replace(/\s+/g, '-')}`);
-                    if (displayEl) {
-                        displayEl.innerText = (scores && scores[staff] !== undefined) ? scores[staff] : 0;
-                    }
-                });
-            }
-        }
-
-        function saveData(e) {
-            e.preventDefault();
-            if (!isAdmin) return;
-            const targetDate = document.getElementById('selected-date').value;
-            if(!targetDate) return;
-
-            performanceData[targetDate] = {};
-
-            document.querySelectorAll('.staff-score-input').forEach(input => {
-                const staffName = input.getAttribute('data-staff');
-                const val = parseFloat(input.value);
-                performanceData[targetDate][staffName] = isNaN(val) ? 0 : val;
-            });
-
-            pushToCloud();
-        }
-
-        function renderProgressTable() {
-            const tbody = document.getElementById('progress-table-body');
-            tbody.innerHTML = '';
-            const activeWeekDates = getActiveWeekDateList();
-
-            ['mon', 'tue', 'wed', 'thu', 'fri'].forEach((day, idx) => {
-                const dObj = new Date(activeWeekDates[idx] + "T00:00:00");
-                document.getElementById(`th-${day}`).innerText = `${day.toUpperCase()} (${dObj.getDate()}/${dObj.getMonth()+1})`;
-            });
-
-            if (staffList.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-gray-500 italic">No staff profiles found.</td></tr>`;
-                return;
-            }
-
-            staffList.forEach(staff => {
-                let rowTotal = 0;
-                let cellsHtml = activeWeekDates.map(dateStr => {
-                    const dayData = performanceData[dateStr] || {};
-                    const scores = (dayData.scores !== undefined) ? dayData.scores : dayData;
-                    const val = (scores && scores[staff]) ? scores[staff] : 0;
-                    rowTotal += val;
-                    return `<td class="p-4 text-gray-600">${val}</td>`;
-                }).join('');
-
-                const row = document.createElement('tr');
-                row.className = 'hover:bg-gray-50 transition-colors';
-                row.innerHTML = `<td class="p-4 font-medium text-gray-900 truncate">${staff}</td>${cellsHtml}<td class="p-4 font-bold bg-indigo-50/50 text-indigo-700">${rowTotal}</td>`;
-                tbody.appendChild(row);
-            });
-        }
-
-        function toggleChartType(type) {
-            preferredChartType = type;
-            const barBtn = document.getElementById('btn-chart-bar');
-            const lineBtn = document.getElementById('btn-chart-line');
-
-            if(type === 'bar') {
-                barBtn.className = "bg-indigo-600 text-white text-xs font-semibold py-2 px-4 rounded-l-md border border-indigo-600 transition-colors";
-                lineBtn.className = "bg-white text-gray-700 hover:bg-gray-50 text-xs font-semibold py-2 px-4 rounded-r-md border border-gray-300 transition-colors";
-            } else {
-                barBtn.className = "bg-white text-gray-700 hover:bg-gray-50 text-xs font-semibold py-2 px-4 rounded-l-md border border-gray-300 transition-colors";
-                lineBtn.className = "bg-indigo-600 text-white text-xs font-semibold py-2 px-4 rounded-r-md border border-indigo-600 transition-colors";
-            }
-            renderLeaderboardAndChart();
-        }
-
-        function renderLeaderboardAndChart() {
-            const activeWeekDates = getActiveWeekDateList();
-            
-            const selectorElement = document.getElementById('global-week-selector');
-            if(selectorElement && selectorElement.options.length > 0) {
-                document.getElementById('pdf-week-label').innerText = selectorElement.options[selectorElement.selectedIndex].text;
-            }
-
-            const staffTotals = staffList.map(staff => {
-                const total = activeWeekDates.reduce((sum, dateStr) => {
-                    const dayData = performanceData[dateStr] || {};
-                    const scores = (dayData.scores !== undefined) ? dayData.scores : dayData;
-                    const val = (scores && scores[staff]) ? scores[staff] : 0;
-                    return sum + val;
-                }, 0);
-                return { name: staff, total: total };
-            });
-
-            const sortedStaff = [...staffTotals].sort((a, b) => b.total - a.total);
-            const leaderboard = document.getElementById('leaderboard-list');
-            leaderboard.innerHTML = '';
-            
-            sortedStaff.forEach((staff, index) => {
-                const li = document.createElement('li');
-                li.className = 'flex justify-between items-center py-3 first:pt-0';
-                li.innerHTML = `
-                    <div class="flex items-center space-x-3 min-w-0">
-                        <span class="flex items-center justify-center shrink-0 w-6 h-6 rounded-full text-xs font-bold ${index === 0 ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-700'}">${index + 1}</span>
-                        <span class="font-medium text-gray-800 truncate">${staff.name}</span>
-                    </div>
-                    <span class="font-bold text-gray-900 shrink-0 ml-2">${staff.total} pts</span>
-                `;
-                leaderboard.appendChild(li);
-            });
-
-            const ctx = document.getElementById('comparisonChart').getContext('2d');
-            if (chartInstance) chartInstance.destroy();
-
-            const axisLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map((day, idx) => {
-                const dObj = new Date(activeWeekDates[idx] + "T00:00:00");
-                return `${day} (${dObj.getDate()}/${dObj.getMonth()+1})`;
-            });
-
-            const datasets = staffList.map((staff, idx) => {
-                const colors = ['#4f46e5', '#0d9488', '#d97706', '#dc2626', '#9333ea', '#4b5563', '#ec4899'];
-                const dataValues = activeWeekDates.map(dateStr => {
-                    const dayData = performanceData[dateStr] || {};
-                    const scores = (dayData.scores !== undefined) ? dayData.scores : dayData;
-                    return (scores && scores[staff]) ? scores[staff] : 0;
-                });
-                
-                return {
-                    label: staff,
-                    data: dataValues,
-                    borderColor: colors[idx % colors.length],
-                    backgroundColor: preferredChartType === 'line' ? colors[idx % colors.length] + '20' : colors[idx % colors.length],
-                    borderRadius: 4,
-                    tension: 0.2,
-                    fill: preferredChartType === 'line' ? false : true
-                };
-            });
-
-            chartInstance = new Chart(ctx, {
-                type: preferredChartType,
-                data: { labels: axisLabels, datasets: datasets },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: { y: { beginAtZero: true, grid: { color: '#f3f4f6' } }, x: { grid: { display: false } } },
-                    plugins: { legend: { position: 'top', labels: { boxWidth: 10, usePointStyle: true } } }
-                }
-            });
-        }
-
-        function exportToPDF() {
-            if (!isAdmin) return;
-            const element = document.getElementById('pdf-report-content');
-            const weekLabel = document.getElementById('global-week-selector').value;
-            
-            const opt = {
-                margin:       [0.5, 0.5, 0.5, 0.5],
-                filename:     `Staff_Performance_Review_Week_${weekLabel}.pdf`,
-                image:        { type: 'jpeg', quality: 0.98 },
-                html2canvas:  { scale: 2, useCORS: true },
-                jsPDF:        { unit: 'in', format: 'letter', orientation: 'landscape' }
-            };
-
-            showLoading("Compiling PDF Executive Report...");
-            html2pdf().set(opt).from(element).save().then(() => {
-                hideLoading();
-            }).catch(err => {
-                console.error(err);
-                hideLoading();
-                alert("PDF Compilation failed.");
-            });
-        }
-
-        function renderManagementDirectory() {
-            const tbody = document.getElementById('management-table-body');
-            tbody.innerHTML = '';
-            staffList.forEach(staff => {
-                const row = document.createElement('tr');
-                row.className = 'hover:bg-gray-50';
-                row.innerHTML = `
-                    <td class="p-4 font-medium text-gray-800">${staff}</td>
-                    <td class="p-4 text-right">
-                        <button onclick="deleteStaffMember('${staff.replace(/'/g, "\\'")}')" class="text-red-600 hover:text-red-900 font-semibold text-xs py-1 px-2.5 rounded hover:bg-red-50 transition">Delete</button>
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
-        }
-
-        function addStaffMember(e) {
-            e.preventDefault();
-            if (!isAdmin) return;
-            const input = document.getElementById('new-staff-name');
-            const name = input.value.trim();
-            if (!name || staffList.includes(name)) return;
-            staffList.push(name);
-            input.value = '';
-            renderManagementDirectory();
-            initInputForm();
-            pushToCloud();
-        }
-
-        function deleteStaffMember(name) {
-            if (!isAdmin) return;
-            if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
-            staffList = staffList.filter(item => item !== name);
-            renderManagementDirectory();
-            initInputForm();
-            pushToCloud();
-        }
-
-        function exportToExcel() {
-            if (!isAdmin) return; 
-            if(staffList.length === 0) return;
-            const activeWeekDates = getActiveWeekDateList();
-            const weekLabel = document.getElementById('global-week-selector').value;
-
-            const rows = staffList.map(staff => {
-                const days = activeWeekDates.map(dateStr => {
-                    const dayData = performanceData[dateStr] || {};
-                    const scores = (dayData.scores !== undefined) ? dayData.scores : dayData;
-                    return (scores && scores[staff]) ? scores[staff] : 0;
-                });
-                
-                return {
-                    "Staff Name": staff,
-                    "Monday": days[0], "Tuesday": days[1], "Wednesday": days[2], "Thursday": days[3], "Friday": days[4],
-                    "Total Sum": days.reduce((a,b)=>a+b,0)
-                };
-            });
-            const worksheet = XLSX.utils.json_to_sheet(rows);
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, "Performance Summary");
-            XLSX.writeFile(workbook, `Performance_Export_Week_${weekLabel}.xlsx`);
-        }
-
-        function switchTab(tabId) {
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.replace('block', 'hidden'));
-            document.getElementById(tabId).classList.replace('hidden', 'block');
-            document.querySelectorAll('.tab-btn').forEach(btn => {
-                btn.classList.remove('border-indigo-600', 'text-indigo-600');
-                btn.classList.add('border-transparent', 'text-gray-500');
-            });
-            document.getElementById(`btn-${tabId}`).classList.add('border-indigo-600', 'text-indigo-600');
-            if(tabId !== 'manage-tab') refreshViews();
-        }
-
-        function refreshViews() {
-            renderProgressTable();
-            renderLeaderboardAndChart();
-            updateFormInputsForDate();
-        }
-
-        window.onload = function() {
-            document.getElementById('selected-date').value = formatDate(new Date());
-            checkAdminStatus();
-            
-            if (isAdmin) {
-                switchTab('log-tab');
-            } else {
-                switchTab('compare-tab');
-            }
-            
-            fetchFromCloud();
-        };
-    </script>
-</body>
-</html>
+        function calculateHomepageStats
